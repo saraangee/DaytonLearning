@@ -232,6 +232,80 @@
     .darrow{transform:rotate(90deg);}
   }
 
+
+
+  /* ---------- SKIP NOTES ---------- */
+  .skipnote{
+    border:1px solid rgba(201,151,62,.35); border-radius:10px;
+    background:rgba(201,151,62,.07); padding:12px 16px; margin:0 0 18px;
+  }
+  .skipnote-tag{
+    display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:9.5px;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--gold,#C9973E);
+    border:1px solid rgba(201,151,62,.4); border-radius:20px; padding:2px 9px; margin-bottom:7px;
+  }
+  .skipnote p{ margin:0; font-size:13.5px; line-height:1.6; }
+
+  /* ---------- STEP-BY-STEP ---------- */
+  .steps{ margin:20px 0; }
+  .step{ display:flex; gap:14px; padding:0 0 18px; }
+  .step:last-child{ padding-bottom:0; }
+  .step-n{
+    flex:0 0 26px; height:26px; border-radius:50%;
+    border:1px solid var(--gold,#C9973E); color:var(--gold,#C9973E);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; margin-top:1px;
+  }
+  .step-main{ flex:1; min-width:0; }
+  .step-t{ font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:4px; }
+  .step-main p{ margin:0; font-size:13.5px; line-height:1.65; }
+  .step-code{
+    background:var(--bg-deep,#12151A); border:1px solid var(--border); border-radius:7px;
+    padding:11px 14px; margin-top:9px; overflow-x:auto;
+  }
+  .step-code pre{
+    margin:0; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+    line-height:1.65; color:var(--gold,#C9973E); white-space:pre;
+  }
+
+  /* ---------- WORKED EXAMPLES ---------- */
+  .worked{
+    border:1px solid var(--border); border-left:3px solid var(--teal, #6FA287);
+    border-radius:10px; padding:16px 18px; margin:22px 0;
+    background:rgba(111,162,135,.05);
+  }
+  .worked-head{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--teal, #6FA287); margin-bottom:6px;
+  }
+  .worked-title{ font-family:'Fraunces',serif; font-weight:600; font-size:16px; margin-bottom:10px; }
+  .worked p{ margin:0 0 10px; }
+  .worked p:last-child{ margin-bottom:0; }
+  .worked-code{
+    background:var(--bg-deep,#12151A); border:1px solid var(--border); border-radius:8px;
+    padding:14px 16px; margin:12px 0; overflow-x:auto;
+  }
+  .worked-code pre{
+    margin:0; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.7;
+    color:var(--text,#ECE9E2); white-space:pre;
+  }
+
+  /* ---------- ANSWER KEYS ---------- */
+  .akey{ margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+  .akey-toggle{
+    background:transparent; border:1px solid var(--border); color:var(--gold,#C9973E);
+    border-radius:6px; padding:7px 14px; font-size:12.5px; cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .akey-toggle:hover{ border-color:var(--gold,#C9973E); }
+  .akey-body{ display:none; margin-top:12px; }
+  .akey-body.open{ display:block; }
+  .akey-body p{
+    margin:0 0 10px; font-size:13.5px; color:var(--text-muted,#8B92A0); line-height:1.65;
+  }
+  .akey-body p:first-child{ color:var(--text,#ECE9E2); }
+  .akey-body p:last-child{ margin-bottom:0; }
+
   /* ---------- TOP-LEVEL VIEW SWITCHER ---------- */
   .topbar{
     display:flex; align-items:center; justify-content:space-between; gap:16px;
@@ -558,7 +632,25 @@ const store = {
     const res = await fetch(REST + "?select=value&key=eq." + encodeURIComponent(key), { headers: SB_HEADERS });
     if(!res.ok) throw new Error("Supabase read failed: " + res.status + " " + (await res.text()));
     const rows = await res.json();
-    return rows.length ? rows[0].value : null;
+    if(rows.length) return rows[0].value;
+
+    /* ONE-TIME MIGRATION
+       Nothing on the server for this key yet. Anyone who used the site before it was
+       connected to Supabase has their data sitting in this browser's localStorage.
+       Push it up so their progress isn't lost, then keep using the server from here on. */
+    const local = localStorage.getItem("fallback:" + key);
+    if(local){
+      try {
+        const parsed = JSON.parse(local);
+        await store.set(key, parsed);
+        localStorage.setItem("migrated:" + key, new Date().toISOString());
+        console.log("Migrated local data to Supabase for key:", key);
+        return parsed;
+      } catch(e){
+        console.error("Migration failed for key " + key, e);
+      }
+    }
+    return null;
   },
   async set(key, value){
     if(!CONFIGURED){
@@ -625,46 +717,151 @@ async function saveAnswers(){
 const LEVELS = [
   {
     id:0, title:"Definitions First", eyebrow:"Level 0",
+    skipNote:"You've done this one — you said the definitions landed. It's been expanded since, so it's worth a skim rather than a re-read. Every technical word used anywhere in this course is defined here.",
     intro:[
-      "Read this one before anything else — everything downstream uses these words.",
+      "Nothing here needs memorising. This is a reference — come back whenever a word stops making sense.",
+      "If you hit a word anywhere in this course that isn't defined on the page you're reading, it will be in this table."
     ],
     definitions:[
       ["Code","Written instructions a computer can follow — text, in a specific language, that tells it exactly what to do."],
       ["Programming language","The vocabulary and grammar used to write code — Python, JavaScript, etc. Different languages, same core ideas."],
-      ["Terminal","A text-only window where you type commands directly to your computer instead of clicking buttons."],
-      ["Repository (\"repo\")","A project's folder, tracked by Git, containing all its code and its full history of changes."],
-      ["Commit","A saved, labeled snapshot of your code at a point in time — like a save point in a video game."],
-      ["Frontend","The part of software a user actually sees and interacts with — buttons, pages, forms."],
+      ["Binary","The only thing a computer really handles: 0s and 1s, standing for electricity being off or on."],
+      ["Compiler","A translator that converts your whole program into binary up front, before it runs."],
+      ["Interpreter","A translator that converts your program line by line, as it runs."],
+      ["Pseudocode","\"Fake code\" — the steps of a program written in plain English, before any real code exists. Nothing runs it."],
+      ["Polling","Repeatedly checking whether something has happened, instead of being told when it does."],
+      ["Syntax","The exact spelling, punctuation and layout a programming language demands. Get a comma wrong and it won't run. This is the part AI handles for you."],
+      ["Variable","A named box holding a value that can change — like \"today's lead count.\""],
+      ["Constant","A named box holding a value that doesn't change — like an API key."],
+      ["Function","A named chunk of instructions you can run whenever you need it, instead of writing it out again each time."],
+      ["Data","Any stored information — names, numbers, dates, whatever."],
+      ["Database","An organised store of data that can be searched and updated. Think of a very fast, very large spreadsheet."],
+      ["Record","One entry in a database — one customer, one invoice, one lead."],
+      ["Field","One piece of information within a record — the name, the date, the amount."],
+      ["Data set","A collection of related records treated as one thing."],
+      ["Query","A question asked of a database — \"show me every invoice from last week.\""],
+      ["JSON","A common format for sending data between systems. Labelled values, readable by both people and machines."],
+      ["Frontend","The part of software a user sees and interacts with — buttons, pages, forms."],
       ["Backend","The part a user never sees — servers, databases, business logic."],
+      ["Server","A computer, usually someone else's, that runs software and answers requests over the internet."],
+      ["Client","Whatever is making the request — your browser, your phone, your app."],
+      ["HTML","The language that describes what's on a web page. Not really programming — more like formatting."],
       ["API","The agreed-upon way two pieces of software talk to each other."],
+      ["API key","A password proving your app is allowed to use someone else's service."],
+      ["Event","Something happening that a system can react to — a click, a file arriving, a payment clearing."],
+      ["Callback / webhook","A message one system sends another the moment something happens, so the second can react."],
+      ["Postback","Another word for the same thing — one system posting a message back to say something occurred."],
       ["Environment","The secure place a project keeps its settings and secrets while it runs."],
+      ["Encryption","Scrambling information so only someone with the key can read it."],
+      ["Terminal","A text-only window where you type commands directly to your computer instead of clicking."],
+      ["Shell","The program inside the terminal that reads your commands. zsh on Mac, PowerShell on Windows."],
+      ["Command","One instruction typed into the terminal."],
+      ["Directory","The technical word for a folder. Same thing."],
+      ["Git","A tool that tracks every change to a project, so you can always go back."],
+      ["Repository (\"repo\")","A project folder tracked by Git, with its full history of changes."],
+      ["Commit","A saved, labelled snapshot of your work at a point in time."],
+      ["Push","Uploading your commits to GitHub."],
+      ["Pull","Downloading the latest version from GitHub."],
+      ["Clone","Downloading a whole repo to your computer for the first time."],
+      ["Fork","Making your own copy of someone else's repo, under your account."],
+      ["Branch","A separate line of work, so you can try something without touching the main version."],
+      ["Bug","Something not working as intended."],
+      ["Debug","Working out why something isn't working, and fixing it."],
+      ["Dependency","Someone else's code your project relies on to run."],
+      ["Library / framework","A pre-built collection of other people's code you use instead of writing your own."],
       ["Deploy","Taking code from your computer and making it live on the internet."],
+      ["Spec","A written description of what you want built, clear enough that someone can build it without asking you questions."],
     ],
   },
   {
     id:1, title:"How Code Actually Runs", eyebrow:"Level 1",
+    skipNote:"You've done this one. The worked example below is new — it's the pseudocode walkthrough Leo did with you on the call, written out.",
     intro:[
-      "You write source code in a programming language. That code isn't something the computer understands directly — computers only speak binary (0s and 1s).",
-      "Something has to translate. That translator is either a compiler (translates everything up front) or an interpreter (translates line by line, as it runs)."
+      "You write source code in a programming language. The computer doesn't understand that directly — computers only handle binary (0s and 1s).",
+      "Something has to translate. That translator is either a compiler (translates the whole thing up front) or an interpreter (translates line by line as it runs).",
+      "The exact spelling and punctuation a language demands is called syntax. You are not going to be learning syntax — that's the part AI does."
     ],
     code:{lines:[
       '# A real, tiny program in Python',
-      'name = "Dayton"          # a variable',
+      'name = "Dayton"          # a variable — the value can change',
       'greeting = "Hello, " + name',
-      'print(greeting)',
+      'print(greeting)          # print = show it on screen',
       '',
       '# Output when run:',
       '# Hello, Dayton'
-    ], caption:"A variable gets combined with fixed text, then printed. Most real code is this readable."},
-    challenge:{title:"Write pseudocode for something real", difficulty:"easy", key:"pseudocode",
+    ], caption:"Four lines. A value is stored, combined with some text, and displayed. Most real code is this readable once you know the words."},
+    worked:{
+      title:"Pseudocode for making coffee",
       body:[
-        "Pick one thing you actually do by hand right now — checking if a campaign hit budget, deciding whether to follow up with a lead.",
-        "Write it below as plain-English \"if this, then that\" logic. No code syntax needed."
+        "Pseudocode (\"fake code\") is not code. There's no syntax to get right and nothing runs it. It's the steps, in order, in plain English — written far more literally than you'd normally bother saying them.",
+        "Here's one, start to finish:"
+      ],
+      code:[
+        'IF there is no water in the kettle',
+        '    fill the kettle',
+        'boil the kettle',
+        'put one spoon of coffee in the cup',
+        'WAIT until the kettle finishes',
+        'pour water into the cup',
+        'IF you take milk',
+        '    add milk',
+        'stir'
+      ],
+      after:[
+        "Every step spelled out. Decisions written as IF. Waiting written as WAIT.",
+        "Note how obvious it looks. That's correct — a computer needs it that obvious. The habit you're building is saying the boring parts out loud."
+      ]
+    },
+    challenge:{title:"Write pseudocode for something simple", difficulty:"easy", key:"pseudocode",
+      body:[
+        "Pick something everyday and physical — making toast, locking up at night, feeding the dog.",
+        "Write the steps in plain English, one per line. Use IF for decisions and WAIT for anything that takes time. Don't use anything from work yet — that comes later."
+      ],
+      answerKey:[
+        "There's no single right answer. A good one has every step written out even when it feels too obvious, decisions marked with IF, and nothing assumed.",
+        "If yours is shorter than the coffee one, you've probably skipped steps a computer would need."
       ]},
   },
   {
-    id:2, title:"Frontend vs. Backend", eyebrow:"Level 2",
-    intro:["Every piece of software you use is really two halves working together."],
+    id:2, title:"Variables & Constants", eyebrow:"Level 2",
+    intro:[
+      "Two words you'll see constantly. Leo covered these on your first call — this is the written version.",
+      "A variable is a named box whose contents can change. A constant is a named box whose contents don't."
+    ],
+    worked:{
+      title:"A parking space",
+      body:[
+        "A numbered parking space in a garage. The space is always space 14 — that never changes. But which car is in it changes daily.",
+        "The space is the name. The car is the value. Because the car changes, this is a variable."
+      ],
+      code:[
+        'space_14 = "blue Honda"      a variable — changes daily',
+        'space_14 = "red Toyota"      same box, new value',
+        '',
+        'garage_address = "12 Main St"    a constant — never changes'
+      ],
+      after:[
+        "That's the whole distinction. Does the value change while the program runs? Variable. Does it stay fixed? Constant.",
+        "Your API key is a constant. Today's lead count is a variable."
+      ]
+    },
+    bullets:[
+      "Variables get used for anything that arrives or updates — user input, live figures, dates",
+      "Constants get used for settings and keys — things you set once and leave alone",
+      "The name is yours to choose. Call it whatever makes sense to you"
+    ],
+    challenge:{title:"Sort them", difficulty:"easy", key:"varconst",
+      body:["For each of these, write variable or constant: your date of birth, today's temperature, your home address, the number of unread emails in your inbox, your phone's serial number."],
+      answerKey:[
+        "Constant: date of birth, phone serial number. Those never change.",
+        "Variable: today's temperature, unread email count. Those change on their own.",
+        "Home address is the interesting one — it changes, but rarely. In practice you'd store it as a variable, because \"rarely\" still isn't \"never.\" When in doubt, variable is the safer choice."
+      ]},
+  },
+  {
+    id:3, title:"Frontend vs. Backend", eyebrow:"Level 3",
+    skipNote:"You've done this one, and Leo went through it live. The answer key below addresses the exact thing you got stuck on — whether \"data\" was the right answer.",
+    intro:["Every piece of software you use is two halves working together."],
     diagram:[
       {label:"FRONTEND", sub:"what the user sees & clicks", cls:"gold"},
       {arrow:true},
@@ -672,153 +869,511 @@ const LEVELS = [
       {arrow:true},
       {label:"BACKEND", sub:"servers, logic, database", cls:"dark"},
     ],
-    diagramCaption:"Example: a dashboard you look at is the FRONTEND. Where the data lives and gets processed is the BACKEND.",
-    code:{lines:['<button>Launch New Campaign</button>','<p>Status: Active</p>'], caption:"Real HTML — the exact kind of code that makes a button and a line of text on a webpage."},
-    challenge:{title:"Sort your own dashboard", difficulty:"easy", key:"sortdash",
-      body:["Pick any app you use regularly. List 3 things on it that are frontend and 3 that are backend."]},
+    diagramCaption:"Frontend is the part you can point at. Backend is everything that had to happen for it to be there.",
+    worked:{
+      title:"A coffee shop",
+      body:[
+        "Walk into a coffee shop. The counter, the menu board, the person taking your order, the cup handed over — that's the frontend. Everything you can see and interact with.",
+        "The kitchen is the backend. Beans stored somewhere, someone pulling the shot, the till recording the sale. You never see any of it, and you don't need to — but nothing arrives without it."
+      ],
+      after:[
+        "Software is the same. You click a button (frontend); something looks up data, works something out, sends an answer back (backend).",
+        "If you're unsure which half something is, ask: could the user point at it? Then it's frontend."
+      ]
+    },
+    code:{lines:['<button>Place order</button>','<p>Status: Ready for pickup</p>'], caption:"Real HTML — the language that describes what's on a page. This makes a button and a line of text. Pure frontend."},
+    challenge:{title:"Sort an app you use", difficulty:"easy", key:"sortdash",
+      body:["Pick any app on your phone. List 3 things you can see or tap (frontend), and 3 things it must be doing out of sight (backend)."],
+      answerKey:[
+        "Frontend is the easy half — anything on screen. Buttons, lists, text, images.",
+        "For backend: \"storing the data\" is a correct answer. So is \"working out what to show me\" or \"checking my password.\"",
+        "If you wrote some version of \"data\" — that's right, and it's the answer most people give. Backend really is mostly two things: keeping data somewhere, and doing things to that data. Adding \"and the actions taken on it\" makes it complete."
+      ]},
   },
   {
-    id:3, title:"APIs in Practice", eyebrow:"Level 3",
-    intro:["You know the concept from Level 0. Here's what it actually looks like."],
-    diagram:[
-      {label:"YOUR APP", sub:"Claude Code", cls:"gold"},
-      {arrow:true},
-      {label:"API", sub:"the messenger", cls:"teal"},
-      {arrow:true},
-      {label:"RED TRACK", sub:"external system", cls:"dark"},
+    id:4, title:"Data, Databases & Data Sets", eyebrow:"Level 4",
+    intro:[
+      "\"Data set\" is one of the words you said comes up in calls. Here's exactly what it means, and the three words around it.",
+      "Almost every system you deal with is, underneath, a database being read from and written to."
     ],
-    diagramCaption:"The API key proves your app is allowed to ask. Without it, the door stays shut.",
+    worked:{
+      title:"A filing cabinet",
+      body:[
+        "A cabinet of customer files. One folder per customer — that's a record. Inside each folder, the same printed form: name, phone, address, date joined. Each blank on that form is a field.",
+        "The whole drawer is a data set. Asking \"pull me everyone who joined last March\" is a query."
+      ],
+      code:[
+        'RECORD   one customer folder',
+        'FIELD    one blank on the form (name, phone, date)',
+        'DATA SET the drawer — all the folders together',
+        'QUERY    "everyone who joined last March"'
+      ],
+      after:[
+        "A database is that cabinet, except the drawer holds millions of folders and the query comes back instantly.",
+        "When someone says \"the data set,\" they mean the drawer. When they say \"pull the data,\" they mean run a query."
+      ]
+    },
+    diagram:[
+      {label:"DATABASE", sub:"the whole cabinet", cls:"gold"},
+      {arrow:true},
+      {label:"DATA SET", sub:"one drawer", cls:"teal"},
+      {arrow:true},
+      {label:"RECORD", sub:"one folder", cls:"dark"},
+    ],
+    diagramCaption:"Each record is made of fields. A query is how you ask for the ones you want.",
     code:{lines:[
-      'GET https://api.redtrack.io/campaigns',
+      '// One record, written as JSON —',
+      '// a common format for sending data between systems',
+      '{',
+      '  "name": "Jane Smith",     // field',
+      '  "joined": "2026-03-14",   // field',
+      '  "status": "active"        // field',
+      '}'
+    ], caption:"Every value has a label. That's what makes it structured — a program can pick out just the field it needs."},
+    funfact:"This is why people say \"clean data.\" If half your records spell the date differently, a query can't find them reliably. The mess isn't in the question — it's in the drawer.",
+    challenge:{title:"Describe a data set", difficulty:"easy", key:"dataset",
+      body:["Think of any list you keep — contacts, a team roster, anything. Write down: what's one record, what are its fields, and one query you'd want to run against it."],
+      answerKey:[
+        "A record is one entry. Fields are the pieces of information you keep about each one.",
+        "A good query names what you want filtered by: \"everyone I haven't spoken to in 30 days\" is a query. \"Show me everything\" isn't really.",
+        "If you can describe something in these terms, you can describe it to a developer — this is the vocabulary they'll use back at you."
+      ]},
+  },
+{
+    id:5, title:"APIs in Practice", eyebrow:"Level 5",
+    skipNote:"You've done this one, and you said after the last call that APIs made a lot more sense. Skim it — the drive-through example is new.",
+    intro:["You know the word from Level 0. Here's what one actually looks like."],
+    diagram:[
+      {label:"YOUR APP", sub:"the one asking", cls:"gold"},
+      {arrow:true},
+      {label:"API", sub:"the agreed window", cls:"teal"},
+      {arrow:true},
+      {label:"THEIR SYSTEM", sub:"the one answering", cls:"dark"},
+    ],
+    diagramCaption:"The API key proves your app is allowed to ask. Without it, the window stays shut.",
+    worked:{
+      title:"Ordering at a drive-through",
+      body:[
+        "You pull up to a speaker and say what you want. You don't walk into the kitchen, and you can't order anything that isn't on the menu.",
+        "The speaker is the API. A fixed, agreed way to ask, a fixed list of what you're allowed to ask for, and a predictable thing that comes back."
+      ],
+      after:[
+        "That's the entire concept. Two systems that don't share a kitchen, talking through an agreed window.",
+        "The API key is proof you're allowed to order — a membership card at the window."
+      ]
+    },
+    code:{lines:[
+      'GET https://api.weather.com/today?city=calgary',
       'Authorization: Bearer YOUR_API_KEY',
       '',
-      '// Response:',
+      '// What comes back, as JSON:',
       '{',
-      '  "campaign": "Pest Control - Q3",',
-      '  "clicks": 4210,',
-      '  "conversions": 187',
+      '  "city": "Calgary",',
+      '  "temp_c": 4,',
+      '  "condition": "cloudy"',
       '}'
-    ], caption:"You're asking RedTrack for numbers, proving who you are with the key, and getting structured data back."},
+    ], caption:"GET means \"fetch me something.\" You asked one specific question, proved who you were, and got labelled fields back."},
     challenge:{title:"Read a response like a human", difficulty:"easy", key:"apiread",
-      body:["From the JSON above: how many clicks did the campaign get? What's the conversion rate (conversions ÷ clicks)?"]},
+      body:["From the response above: what's the temperature, and what did you have to send in order to be allowed to ask?"],
+      answerKey:[
+        "4 degrees, and you had to send your API key in the Authorization line.",
+        "The wider point: the answer came back as labelled fields, not a sentence. That's structured data — every value has a name, so a program can pick out the one it needs."
+      ]},
   },
   {
-    id:4, title:"Terminals & Shells", eyebrow:"Level 4",
+    id:6, title:"Events & Callbacks", eyebrow:"Level 6",
     intro:[
-      "\"Terminal\" and \"shell\" get used interchangeably, but they're two different layers.",
-      "A terminal is the window you open. A shell is the actual program inside it interpreting your commands."
+      "So far, everything has been you asking for something. Most useful software works the other way round — something happens, and a system reacts on its own.",
+      "The thing that happens is an event. The message announcing it is a callback, or webhook."
     ],
-    bullets:[
-      "Windows: CMD is the old default; PowerShell is the modern standard.",
-      "Mac: the built-in Terminal app runs zsh by default."
+    worked:{
+      title:"A doorbell",
+      body:[
+        "Two ways to know if someone's at your door.",
+        "You could walk to the door every two minutes and check. That works, but you spend all day checking and you're still up to two minutes late.",
+        "Or you fit a doorbell. Now you do nothing until someone arrives, and the moment they do, you know."
+      ],
+      after:[
+        "Checking repeatedly is called polling. Being told the instant it happens is a callback — a webhook when it arrives over the internet.",
+        "You'll also hear postback used for the same idea: one system posting a message back to another to say something happened. Same mechanism, different word."
+      ]
+    },
+    diagram:[
+      {label:"EVENT", sub:"something happens", cls:"gold"},
+      {arrow:true},
+      {label:"CALLBACK", sub:"a message is sent", cls:"teal"},
+      {arrow:true},
+      {label:"YOUR SYSTEM", sub:"reacts", cls:"dark"},
     ],
-    table:{head:["Command","What it does"], rows:[
-      ["cd [folder]","Move into a folder"],
-      ["cd ..","Move up one folder"],
-      ["ls (dir on CMD)","List what's in the current folder"],
-      ["pwd","Show which folder you're in"],
-      ["mkdir [name]","Create a new folder"],
-      ["rm [file] (del on CMD)","Delete a file — no undo"],
-      ["clear (cls on CMD)","Wipe the screen"],
-    ]},
+    diagramCaption:"No one asked. The message arrived because something occurred.",
+    funfact:"This is why \"real-time\" software feels instant. Nothing is checking faster — it stopped checking and started being told.",
+    challenge:{title:"Spot the event", difficulty:"easy", key:"eventspot",
+      body:["Think of something in ordinary life that notifies you rather than making you check. Write down: what's the event, who sends the message, and what you do when it arrives."],
+      answerKey:[
+        "A phone notification, a kettle clicking off, a car beeping about the lights — all the same shape.",
+        "The pattern: something occurred → a message was sent → you reacted. Every webhook in software is those three steps."
+      ]},
   },
   {
-    id:5, title:"Setting Up Claude Code", eyebrow:"Level 5",
-    intro:["The real steps, in order. About 5 minutes."],
+    id:7, title:"Keeping Secrets Safe", eyebrow:"Level 7",
+    intro:[
+      "This is the piece left hanging on your first call — how a secret actually stays secret.",
+      "API keys are passwords. Anyone holding one can use the service you're paying for, as you."
+    ],
+    worked:{
+      title:"A locked box",
+      body:[
+        "Put something valuable in a locked box. The box can sit in plain sight — a shelf, a hallway, anywhere. It doesn't matter who walks past, because what's inside is unreadable without the key.",
+        "Encryption is that. Information scrambled so thoroughly that having it is useless unless you also hold the key to unscramble it."
+      ],
+      after:[
+        "This is why a website can send your card number across the internet safely. It travels scrambled. Anyone intercepting it gets noise.",
+        "The lock does its job automatically. Your job is only ever to not hand out the key."
+      ]
+    },
+    diagram:[
+      {label:"YOUR PROJECT", sub:"needs the key", cls:"gold"},
+      {arrow:true},
+      {label:"ENVIRONMENT", sub:"the locked box", cls:"teal"},
+      {arrow:true},
+      {label:"THE KEY", sub:"never in your code", cls:"dark"},
+    ],
+    diagramCaption:"The key lives in the environment. Your code asks for it by name — the key itself is never written into the code.",
     bullets:[
-      "You need a paid Claude account (Pro, Max, Team, or Enterprise).",
-      "Open a terminal — Terminal app on Mac, PowerShell on Windows.",
+      "Never paste an API key into a chat with an AI — that conversation gets stored",
+      "Never put a key directly in your code — code gets shared, uploaded and backed up",
+      "Put it in the environment instead, and let the project read it from there",
+      "If a key leaks: delete it and generate a new one. That instantly makes the old one useless"
     ],
     code:{lines:[
-      '# Mac / Linux:',
-      'curl -fsSL claude.ai/install.sh | bash',
+      '# What lives in your environment file (named .env)',
+      'WEATHER_API_KEY=abc123...',
+      'QUICKBOOKS_API_KEY=xyz789...',
       '',
-      '# Windows PowerShell:',
-      'irm https://claude.ai/install.ps1 | iex'
-    ], caption:"The native installer — Anthropic's current recommended method."},
-    code2:{lines:['claude --version'], caption:"Should print a version number."},
-    code3:{lines:['claude','/login'], caption:"First time only — after this it remembers you."},
-    code4:{lines:['cd path/to/your/project','claude'], caption:'"cd" = change directory. Tell the terminal which folder before starting.'},
-    linkText:"Official setup docs →", linkUrl:"https://code.claude.com/docs/en/setup",
+      '# What your code says — it names the key, never contains it',
+      'key = get_from_environment("WEATHER_API_KEY")'
+    ], caption:"The file is called .env — the dot at the front means hidden. Git is told to never upload it."},
+    funfact:"Encryption is why the Enigma machine mattered in the war. The messages were being intercepted the whole time — they just couldn't be read until the key was worked out.",
+    challenge:{title:"Find the mistake", difficulty:"easy", key:"secretsafe",
+      body:["Someone pastes their API key straight into a chat with an AI to ask why their code isn't working. Write down what's gone wrong, and what they should do about it."],
+      answerKey:[
+        "The key is now stored in that conversation, on someone else's servers, outside their control.",
+        "The fix: delete that key, generate a new one, put the new one in the environment. Share the code, never the key.",
+        "Worth remembering: a leaked key isn't a disaster if you catch it. Replacing it takes a minute. The damage comes from not noticing."
+      ]},
   },
   {
-    id:6, title:"How Claude Code Works", eyebrow:"Level 6",
-    diagram:[
-      {label:"YOU", sub:"type a request", cls:"gold"},
-      {arrow:true},
-      {label:"CLAUDE CODE", sub:"reads/writes files", cls:"teal"},
-      {arrow:true},
-      {label:"YOUR PROJECT", sub:"on your computer", cls:"dark"},
+    id:8, title:"The Terminal, Step by Step", eyebrow:"Level 8",
+    skipNote:"You opened the terminal and made a folder with Leo on the call. This is the full written version so you can do it again on your own — and it covers the parts you didn't get to.",
+    intro:[
+      "The terminal is a window where you type instructions to your computer instead of clicking. The program inside it reading your commands is called the shell.",
+      "Everything below is meant to be typed. Do it as you read — it takes about five minutes."
     ],
-    diagramCaption:"Claude Code is an agent — it actually opens files, edits them, and runs commands, the same way a developer would.",
-    bullets:[
-      "You describe what you want in plain English — no special syntax needed",
-      "Claude Code reads your existing project files before changing anything",
-      "It writes/edits files and runs terminal commands on your behalf",
-      "You review the result — approve, ask for changes, or ask it to explain",
+    steps:[
+      {n:"1", t:"Open it", d:"Mac: press Cmd+Space, type Terminal, hit Enter. Windows: press the Start key, type PowerShell, hit Enter.", code:null},
+      {n:"2", t:"Read what's already there", d:"You'll see something like your computer's name, then your username, then a % sign (Mac) or > (Windows). The % just means \"type after this.\" It isn't an error and it isn't waiting for anything in particular.", code:null},
+      {n:"3", t:"Find out where you are", d:"Type this and press Enter. It prints the folder you're currently sitting in — usually your home folder.", code:["pwd"]},
+      {n:"4", t:"See what's around you", d:"Lists everything in the current folder. You should recognise names like Desktop, Documents, Downloads.", code:["ls"]},
+      {n:"5", t:"Make a folder", d:"Creates a new folder called practice, right where you are. Nothing appears to happen — that's normal. The terminal only speaks up when something goes wrong.", code:["mkdir practice"]},
+      {n:"6", t:"Prove it worked", d:"Open Finder (Mac) or File Explorer (Windows), go to your home folder, and look for a folder called practice. It's there. You just created it by typing.", code:null},
+      {n:"7", t:"Go into it", d:"cd means change directory — directory is just the technical word for folder. Look at your prompt: it now shows you're inside practice.", code:["cd practice"]},
+      {n:"8", t:"Go back home", d:"The squiggle (~) means your home folder. This works from anywhere, no matter how deep you've gone.", code:["cd ~"]},
     ],
-    funfact:"Claude Code doesn't \"remember\" your codebase the way you remember a room — it re-reads relevant files fresh each time. That's why clear, specific instructions matter more than lengthy ones.",
-    code:{lines:['"Add a new section to my command center that shows','how many hours I\'ve spent learning each day this week,','as a simple bar chart."'], caption:"A complete instruction — specific about outcome, not code."},
-    challenge:{title:"Write a real prompt", difficulty:"medium", key:"realprompt",
-      body:["Think of one thing you wish your dashboard did. Write the actual prompt you'd give Claude Code to build it."]},
-  },
-  {
-    id:7, title:"How GitHub Works", eyebrow:"Level 7",
-    diagram:[
-      {label:"YOUR COMPUTER", sub:"local files", cls:"gold"},
-      {arrow:true},
-      {label:"GIT", sub:"tracks changes", cls:"teal"},
-      {arrow:true},
-      {label:"GITHUB", sub:"cloud backup", cls:"dark"},
-    ],
-    diagramCaption:"commit = save a snapshot · push = upload it · pull = download others' changes",
-    intro:["Git tracks changes to your code on your own computer. GitHub is a website that stores a backup copy in the cloud."],
+    worked:{
+      title:"That's the whole toolkit",
+      body:["Four commands do everything you'll actually need:"],
+      code:[
+        'pwd              where am I?',
+        'ls               what is here?',
+        'mkdir [name]     make a folder',
+        'cd [name]        go into a folder',
+        'cd ~             go back home'
+      ],
+      after:[
+        "There are hundreds of other commands. You aren't learning them — you'll look them up or Claude Code will run them for you.",
+        "The table below is reference, not homework. Skim it so the words aren't strange, then forget it."
+      ]
+    },
     table:{head:["Command","What it does"], rows:[
-      ["git init","Start tracking a folder as a project"],
-      ["git status","See what's changed since your last commit"],
-      ["git add .","Mark all changed files as ready to save"],
-      ["git commit -m \"msg\"","Save a labeled snapshot"],
-      ["git push","Upload your snapshots to GitHub"],
-      ["git pull","Download the latest snapshots"],
-      ["git clone [url]","Download a whole project for the first time"],
-      ["git log","See the history of past commits"],
-      ["git diff","See exactly what changed, line by line"],
-      ["git branch [name]","Create a separate line of work"],
+      ["cd ..","Go up one folder"],
+      ["clear (cls on Windows)","Wipe the screen — cosmetic only"],
+      ["open . (start . on Windows)","Open the current folder in Finder/Explorer"],
+      ["rm [file]","Delete a file — no undo, no bin. Be careful"],
+      ["--help after any command","Prints what that command does"],
     ]},
-    funfact:"GitHub was named half-jokingly — \"Git\" (the tool) plus \"Hub\" (a meeting place). Octocat, the mascot, has eight arms so it can commit code faster. (It cannot. It's a cartoon.)",
-    diagram2Title:"Where your changes actually live",
-    diagram2:[
+    funfact:"Pressing the up arrow brings back your last command. It's the single most-used key in a terminal.",
+    challenge:{title:"Do it without looking", difficulty:"easy", key:"terminaldo",
+      body:["Close the terminal, reopen it, and from memory: make a folder called test2, go into it, confirm where you are, then go back home. Write down which step you had to look up."],
+      answerKey:[
+        "mkdir test2, then cd test2, then pwd, then cd ~.",
+        "Whichever one you had to look up is the one to run once more. Nobody remembers these from reading — only from typing."
+      ]},
+  },
+{
+    id:9, title:"Claude Code, Step by Step", eyebrow:"Level 9",
+    skipNote:"You installed this with Leo on the call, so it's already working on your machine. Skip to the challenge at the bottom — steps 1–3 are here for a new laptop or if something breaks.",
+    intro:[
+      "Claude Code runs inside the terminal. You talk to it in plain English and it reads, writes and edits real files on your computer.",
+      "You need a paid Claude account — Pro, Max, Team or Enterprise."
+    ],
+    steps:[
+      {n:"1", t:"Install it", d:"Open the terminal and paste one of these, then press Enter. Wait for it to finish.", code:["# Mac:","curl -fsSL claude.ai/install.sh | bash","","# Windows PowerShell:","irm https://claude.ai/install.ps1 | iex"]},
+      {n:"2", t:"Check it worked", d:"Should print a version number. If it says \"command not found,\" close the terminal, open it again, and retry.", code:["claude --version"]},
+      {n:"3", t:"Log in", d:"Run claude, then type /login. A browser window opens — sign in as normal. It remembers you after this.", code:["claude","/login"]},
+      {n:"4", t:"Start it in the right folder", d:"This matters. Claude Code only sees the folder you started it in. Always go to your project folder first, then run claude.", code:["cd practice","claude"]},
+      {n:"5", t:"Give it a real instruction", d:"Type this in plain English and press Enter. Watch what it does — it will tell you which files it's creating before it creates them.", code:['Make a file called hello.html with a page that says','"Hello" in large text, centred on the screen.']},
+      {n:"6", t:"Look at what it made", d:"Type this to open the folder. Double-click hello.html and it opens in your browser. You just built a web page by describing it.", code:["open .","# Windows: start ."]},
+      {n:"7", t:"Ask it to change something", d:"Back in Claude Code, ask for a change. It re-reads the file, edits it, and tells you what it changed.", code:['Make the text blue and add today\'s date underneath it.']},
+      {n:"8", t:"Leave", d:"Type /exit or press Ctrl+C twice. Your files stay where they are.", code:["/exit"]},
+    ],
+    funfact:"Claude Code re-reads the relevant files every time rather than remembering them. That's why being specific matters far more than being lengthy.",
+    challenge:{title:"Build something tiny", difficulty:"easy", key:"ccbuild",
+      body:["Make a new folder, start Claude Code in it, and ask it to build one small page — a countdown, a list, a colour picker, anything. Then ask for two changes. Write down what you asked for and anything that came out wrong."],
+      answerKey:[
+        "What came out wrong is the useful part. Vague requests produce surprising results; that's the feedback loop.",
+        "If everything worked first time, ask for something harder next time. You learn more from fixing than from building."
+      ]},
+  },
+  {
+    id:10, title:"Talking to Claude Code Well", eyebrow:"Level 10",
+    intro:[
+      "You can now run it. This level is about getting good results out of it, which is a separate skill.",
+      "The whole thing comes down to describing the outcome precisely, without describing the code."
+    ],
+    worked:{
+      title:"Vague vs. specific",
+      body:["The same idea, asked two ways."],
+      code:[
+        'Vague:',
+        '  "make me a shopping list app"',
+        '',
+        'Specific:',
+        '  "Build a page with a text box and an Add button.',
+        '   Typing an item and clicking Add puts it in a list below.',
+        '   Each item has a checkbox. Checked items go grey.',
+        '   The list should still be there when I reload the page."'
+      ],
+      after:[
+        "The second describes what you'd see and what happens when you use it. It never mentions code.",
+        "Notice the last line. \"Still there when I reload\" is the kind of thing that gets left out and then has to be redone."
+      ]
+    },
+    bullets:[
+      "Say what's on screen, and what happens when someone interacts with it",
+      "Say what should still be true later — does it save? does it reset?",
+      "Give it one job at a time. Three small requests beat one big one",
+      "If the result is wrong, say what's wrong rather than starting again",
+      "Ask it to explain anything you don't follow — that's free and it's how you learn"
+    ],
+    challenge:{title:"Write a real prompt", difficulty:"medium", key:"realprompt",
+      body:["Think of something small and everyday you'd like built — a timer, a packing list, a habit tracker. Write the actual prompt: what's on screen, what happens when you use it, what should still be true after a reload."],
+      answerKey:[
+        "Check yours for three things: what's on the screen, what happens when you interact, and what persists.",
+        "The test: could someone build it without asking you a single question?"
+      ]},
+  },
+  {
+    id:11, title:"Git & GitHub, Step by Step", eyebrow:"Level 11",
+    intro:[
+      "Git tracks every change to a project on your computer. GitHub is a website that stores a copy in the cloud.",
+      "You have something worth saving now, so this is the point where it becomes useful rather than abstract."
+    ],
+    worked:{
+      title:"Saving your work",
+      body:[
+        "Think of writing a long document. You save as you go. Occasionally you save a named version — \"draft before I cut the middle section\" — so you can get back to it if the next change turns out to be a mistake.",
+        "A commit is that named version. A push is putting a copy somewhere off your machine."
+      ],
+      after:[
+        "Commit = a labelled save point, on your computer only. Push = a copy stored elsewhere.",
+        "The real value isn't backup. It's that you can always get back to a version that worked."
+      ]
+    },
+    steps:[
+      {n:"1", t:"Make a GitHub account", d:"Go to github.com and sign up if you haven't. Free. Remember the username — you'll type it.", code:null},
+      {n:"2", t:"Check Git is installed", d:"Prints a version number if you have it. Macs usually do. If not, it will offer to install — say yes.", code:["git --version"]},
+      {n:"3", t:"Tell Git who you are", d:"One time only, on each computer. This is what gets stamped on every save point you make.", code:['git config --global user.name "Dayton Westerman"','git config --global user.email "you@example.com"']},
+      {n:"4", t:"Start tracking a project", d:"Go into the folder you built something in, and turn it into a repo — a project folder Git is watching.", code:["cd practice","git init"]},
+      {n:"5", t:"See what Git noticed", d:"Lists everything that's changed since the last save point. Right now that's everything, because there isn't one yet.", code:["git status"]},
+      {n:"6", t:"Make your first save point", d:"add marks what to include; commit saves it with a label. The -m is the message. Do both, in that order, every time.", code:['git add .','git commit -m "First version"']},
+      {n:"7", t:"Create the online copy", d:"On github.com, click New repository, give it the same name, leave everything else alone, and click Create. Don't tick any of the extra boxes.", code:null},
+      {n:"8", t:"Connect the two and upload", d:"GitHub shows you these exact lines after creating the repo. Copy yours — the URL has your username in it.", code:['git remote add origin https://github.com/YOUR-NAME/practice.git','git branch -M main','git push -u origin main']},
+      {n:"9", t:"Look at it", d:"Refresh the GitHub page. Your files are there. From now on, saving is just three commands.", code:['git add .','git commit -m "what I changed"','git push']},
+    ],
+    diagram:[
       {label:"1. EDIT A FILE", sub:"only on your computer", cls:"gold"},
       {arrow:true},
       {label:"2. GIT COMMIT", sub:"still only on your computer", cls:"teal"},
       {arrow:true},
       {label:"3. GIT PUSH", sub:"now on GitHub too", cls:"dark"},
     ],
-    challenge:{title:"Write a commit message", difficulty:"medium", key:"commitmsg",
-      body:["Imagine Claude Code just added a learning-hours chart to your dashboard. Write the actual commit message — short and specific."]},
+    diagramCaption:"A commit is not a backup. Only the push leaves your machine.",
+    funfact:"You'll rarely type these by hand — Claude Code runs them for you if you ask. Knowing what they mean is so you understand what it just did.",
+    challenge:{title:"Push something real", difficulty:"medium", key:"gitpush",
+      body:["Take the folder you built in Level 9 and get it onto GitHub, following the steps above. Then change one thing, and commit and push again. Write down where you got stuck."],
+      answerKey:[
+        "Step 8 is where most people stall — the URL has to be yours, not the example.",
+        "If you get an error mentioning authentication, GitHub will prompt you to sign in through the browser. That's normal the first time.",
+        "Once the second push works, you have the entire loop. Everything after this is the same three commands."
+      ]},
   },
-  {
-    id:8, title:"Putting It All Together", eyebrow:"Level 8",
-    intro:["Say you wanted Claude Code to build an automated invoicing tool. Here's how every level maps to a real piece of it:"],
+{
+    id:12, title:"Holding Your Own in a Technical Call", eyebrow:"Level 12",
+    intro:[
+      "This is the one that maps directly onto what you said you wanted — not feeling lost when a call turns technical, and being able to speak for your partner rather than hand the call over.",
+      "You don't need to know more than the other person. You need to be able to follow, and to ask the question that moves it forward."
+    ],
+    worked:{
+      title:"Four questions that work on anything",
+      body:["You can follow almost any technical conversation with these, in this order. None of them require you to know how it works."],
+      code:[
+        '1. "What talks to what?"',
+        '   → gets you the systems and the connections',
+        '',
+        '2. "What happens when that fails?"',
+        '   → separates the people who have built it',
+        '     from the people who have described it',
+        '',
+        '3. "How long, and what makes it take that long?"',
+        '   → the second half is the real question',
+        '',
+        '4. "What would we need to change if we doubled?"',
+        '   → tells you whether it was built to last'
+      ],
+      after:[
+        "Every one of those is answerable in plain English. If someone can't answer them without jargon, that's information about them, not about you.",
+        "Question 2 is the most useful one you can ask in a room."
+      ]
+    },
     bullets:[
-      "Frontend: a page where you see unpaid invoices and click \"send reminder\"",
-      "Backend: logic that checks which invoices are overdue",
-      "API: the connection to QuickBooks that pulls real invoice data",
-      "Environment: where your QuickBooks API key lives, safely out of sight",
-      "Claude Code: the tool you'd talk to in plain English to build it",
-      "GitHub: where the finished project lives, backed up, with full history",
+      "When you hear a word you don't know, ask what it means. Doing it early reads as confidence; doing it late reads as bluffing",
+      "\"Walk me through it in order\" is the single most useful sentence in a technical call",
+      "If you can restate what they said in your own words, you understood it. If you can't, you didn't — and now you know to ask",
+      "You are allowed to say \"I'll come back to you on that.\" Nobody expects the answer in the room",
     ],
+    funfact:"The people who sound most credible in technical conversations are usually not the ones with the most knowledge. They're the ones who ask precise questions and admit gaps quickly.",
+    challenge:{title:"Turn a word into a question", difficulty:"medium", key:"techcall",
+      body:["Think of the last time a call turned technical and you lost the thread. Write down the word or moment where it happened, then write the question you'd ask now — using one of the four above."],
+      answerKey:[
+        "The goal is a question that gets a plain-English answer, not one that hides that you didn't follow.",
+        "\"What talks to what?\" resets almost any conversation to something you can follow. It's the one to lead with."
+      ]},
   },
   {
-    id:9, title:"Quick Check", eyebrow:"Level 9",
-    quiz:[
-      {q:"At its core, what is an algorithm?", opts:["A step-by-step recipe for solving a problem","A type of encryption","A programming language"], correct:0, explain:"That's it — no more, no less. Complex algorithms are just lots of simple steps chained together."},
-      {q:"Why do computers use only 0s and 1s?", opts:["A design choice for aesthetics","Because electricity is either flowing or not — on or off","Letters take up too much memory"], correct:1, explain:"Computers are built from transistors — electrical gates that are either letting electricity through or blocking it."},
-      {q:"What's the difference between frontend and backend?", opts:["They're the same thing","Frontend is what users see; backend is the invisible logic/data layer","Backend is only for mobile apps"], correct:1, explain:"Frontend = buttons, pages, forms. Backend = servers, databases, business logic — invisible to the user."},
-      {q:"What does 'git push' actually do?", opts:["Deletes your local files","Uploads your committed snapshots to GitHub","Downloads someone else's changes"], correct:1, explain:"Push uploads what you've already committed locally up to GitHub's servers — that's the moment it becomes backed up."},
-      {q:"Fork vs. clone — which is right?", opts:["They're identical","Fork copies someone else's repo to your account; clone downloads any repo to your computer","Clone only works on Windows"], correct:1, explain:"Fork = your own copy of someone else's project on GitHub. Clone = downloading any repo (yours or others') to your machine."},
+    id:13, title:"Briefing Someone Else", eyebrow:"Level 13",
+    intro:[
+      "The same skill that makes Claude Code useful makes your developer useful — describing an outcome clearly enough that someone can act without coming back to you.",
+      "A written description like that is called a spec."
     ],
+    worked:{
+      title:"A good spec",
+      body:["Four questions. Answer all four and you have one."],
+      code:[
+        '1. WHAT SHOULD IT DO?',
+        '   Remind me to water the plants every Sunday.',
+        '',
+        '2. WHAT DOES DONE LOOK LIKE?',
+        '   A notification on Sunday morning I can tick off.',
+        '   If I tick it, it goes away until next week.',
+        '',
+        '3. WHAT SHOULD IT NOT DO?',
+        '   Not nag me more than once a day.',
+        '',
+        '4. WHAT ALREADY EXISTS?',
+        '   Nothing — starting fresh.'
+      ],
+      after:[
+        "Every one is answerable without knowing any code. That's the point — a spec is about the outcome. How is their job.",
+        "Question 4 is the one people skip, and it's the one that saves the most time."
+      ]
+    },
+    bullets:[
+      "Describe the outcome, not the method",
+      "Say what done looks like, specifically enough to check",
+      "Say what it shouldn't do — that prevents most of the rework",
+      "Say what already exists, so nothing gets rebuilt by accident",
+    ],
+    funfact:"Most back-and-forth on a build isn't caused by hard problems. It's caused by question 2 never being answered, so nobody agrees on when it's finished.",
+    challenge:{title:"Write a four-question brief", difficulty:"medium", key:"spec",
+      body:["Pick something you'd actually want built. Answer all four questions in your own words."],
+      answerKey:[
+        "Read it back and ask: could someone start work without messaging me?",
+        "If not, it's almost always question 2 or 4 that's missing — what done looks like, or what already exists."
+      ]},
   },
+  {
+    id:14, title:"Putting It All Together", eyebrow:"Level 14",
+    intro:["Every level so far, mapped onto one real thing you could build. This is where your own work comes in for the first time."],
+    bullets:[
+      "Pseudocode: the steps written out in plain English before anything gets built",
+      "Frontend: the page where you see what's outstanding and click something",
+      "Backend: the logic that works out what's due and what isn't",
+      "Data: what a record is here, and which fields each one needs",
+      "API: the connection to whatever system already holds the real data",
+      "Events: what happens on its own — a date arriving, a file landing",
+      "Environment: where the API key lives, out of the code",
+      "Claude Code: the tool you describe it to",
+      "Git: the save points, so a broken version is never a problem",
+      "A spec: the same description written down, so someone else could pick it up",
+    ],
+    funfact:"Nothing on that list is advanced. A working tool is these ten ideas, arranged.",
+    challenge:{title:"Plan a real build", difficulty:"hard", key:"planbuild",
+      body:["Pick something you actually want — the invoicing reminder is the obvious one. Go down the list above and write one line for each. Skip any that genuinely don't apply.","Then write the four-question spec from Level 13 for the same thing."],
+      answerKey:[
+        "\"Doesn't apply\" is a valid answer for several. A tool with no outside data needs no API.",
+        "If you can fill in most of the list, you have enough to start building — and enough to hand to someone else if you'd rather.",
+        "This is the artefact worth bringing to a call. It's specific enough to be argued with, which is what makes it useful."
+      ]},
+  },
+  {
+    id:15, title:"Your Own Repo", eyebrow:"Level 15",
+    intro:[
+      "Last one. You get your own copy of this site — the thing you've been learning from.",
+      "It's a real project: real HTML, real code, already working, already live. Nothing to set up."
+    ],
+    bullets:[
+      "You'll get your own copy on GitHub — separate from this one, so nothing you do affects anyone else",
+      "Clone it, open Claude Code in the folder, change whatever you want",
+      "Break it freely. Every earlier version is saved, so you can always go back",
+      "Publish it and it's live on the internet at your own address",
+    ],
+    worked:{
+      title:"Everything you've learned, in one place",
+      body:["This project uses every idea in the course. You can go and look at each one:"],
+      code:[
+        'Frontend     the pages, buttons and layout you see',
+        'Backend      where progress is stored and read back',
+        'Data         each level is a record with fields',
+        'API          how it talks to the database',
+        'Events       what fires when you tick a level off',
+        'Environment  where the keys are kept, out of the code',
+        'Git          every change ever made, still there'
+      ],
+      after:[
+        "Nothing here is beyond what you've covered. Open the files and you'll recognise the pieces.",
+        "That's the point of the whole thing: not that you can write it, but that you can read it, change it, and say what you want next."
+      ]
+    },
+    challenge:{title:"Make it yours", difficulty:"hard", key:"ownrepo",
+      body:["Change something real and publish it. Colours, wording, an extra level, anything. Then write down what you changed and anything that broke on the way."],
+      answerKey:[
+        "What broke is the useful part. Something not working, and you working out why, is the actual skill.",
+        "If nothing broke, change something bigger."
+      ]},
+  },
+  {
+    id:16, title:"Quick Check", eyebrow:"Level 16",
+    quiz:[
+      {q:"At its core, what is an algorithm?", opts:["A step-by-step recipe for solving a problem","A type of encryption","A programming language"], correct:0, explain:"No more, no less. Complex algorithms are lots of simple steps chained together."},
+      {q:"What's the difference between a variable and a constant?", opts:["Variables are numbers, constants are text","A variable's value can change while running; a constant's doesn't","Constants are faster"], correct:1, explain:"Today's lead count is a variable. Your API key is a constant."},
+      {q:"In a database, what's a record?", opts:["One entry — one customer, one invoice","The whole database","A backup copy"], correct:0, explain:"One folder in the filing cabinet. The pieces of information inside it are fields."},
+      {q:"What's a callback (or webhook, or postback)?", opts:["A scheduled daily report","A message sent the moment something happens, so another system can react","A backup of your database"], correct:1, explain:"Something occurs, a message goes out, the other system reacts. The alternative is checking over and over — slower and wasteful."},
+      {q:"Where should an API key live?", opts:["In your code, so it's easy to find","In the environment, kept out of your code","In a chat with your AI so it can help"], correct:1, explain:"Code gets shared and uploaded; AI chats get stored. The environment is the locked box — code asks it for the key by name."},
+      {q:"What does 'git push' actually do?", opts:["Deletes your local files","Uploads your committed snapshots to GitHub","Downloads someone else's changes"], correct:1, explain:"A commit is still only on your machine. Push is the moment a copy exists somewhere else."},
+      {q:"You don't understand a word someone used on a call. Best move?", opts:["Note it and look it up afterwards","Ask what it means, straight away","Nod and infer from context"], correct:1, explain:"Asking early reads as confidence. Asking late — or not at all — is where people actually lose credibility."},
+      {q:"What makes a good brief for a developer?", opts:["Telling them exactly which code to write","The outcome, what done looks like, what it shouldn't do, and what already exists","Keeping it short and letting them figure it out"], correct:1, explain:"How is their job. What, and what done looks like, is yours."},
+    ],
+  }
 ];
 
 function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
@@ -842,8 +1397,19 @@ function renderLevel(lv){
     </div>
     <div class="level-body"><div class="level-inner">`;
 
+  if(lv.skipNote) html += `<div class="skipnote"><span class="skipnote-tag">Already covered</span><p>${lv.skipNote}</p></div>`;
+
   if(lv.intro) lv.intro.forEach(p => html += `<p>${p}</p>`);
   if(lv.bullets) html += '<ul>' + lv.bullets.map(b=>`<li>${b}</li>`).join('') + '</ul>';
+
+  if(lv.steps){
+    html += '<div class="steps">' + lv.steps.map(s => {
+      let b = `<div class="step"><div class="step-n">${s.n}</div><div class="step-main">
+        <div class="step-t">${s.t}</div><p>${s.d}</p>`;
+      if(s.code) b += `<div class="step-code"><pre>${s.code.join('\n')}</pre></div>`;
+      return b + '</div></div>';
+    }).join('') + '</div>';
+  }
 
   if(lv.definitions){
     html += `<table><tr><th>Term</th><th>Definition</th></tr>` +
@@ -874,6 +1440,18 @@ function renderLevel(lv){
     html += `<h4>${lv.diagram2Title}</h4>` + diagramHTML(lv.diagram2);
   }
 
+  if(lv.worked){
+    const w = lv.worked;
+    let wh = `<div class="worked">
+      <div class="worked-head">Worked example</div>
+      <div class="worked-title">${w.title}</div>`;
+    if(w.body) wh += w.body.map(p=>`<p>${p}</p>`).join('');
+    if(w.code) wh += `<div class="worked-code"><pre>${w.code.join('\n')}</pre></div>`;
+    if(w.after) wh += w.after.map(p=>`<p>${p}</p>`).join('');
+    wh += `</div>`;
+    html += wh;
+  }
+
   if(lv.challenge){
     const c = lv.challenge;
     const savedVal = answers[c.key] || '';
@@ -890,6 +1468,10 @@ function renderLevel(lv){
           <span class="save-hint">Saved automatically as you type</span>
           <button class="btn btn-mark ${isMarked?'marked':''}" id="markbtn-${c.key}" onclick="markChallenge('${c.key}')">${isMarked?'✓ Done':'Mark Done'}</button>
         </div>
+        ${c.answerKey ? `<div class="akey">
+          <button class="akey-toggle" onclick="toggleKey('${c.key}')" id="akeybtn-${c.key}">Check your answer</button>
+          <div class="akey-body" id="akey-${c.key}">${c.answerKey.map(p=>`<p>${p}</p>`).join('')}</div>
+        </div>` : ''}
       </div>
     </div>`;
   }
@@ -963,6 +1545,13 @@ function markLevel(id){
   const railMedal = document.querySelector(`.rail-node[data-id="${id}"] .medal`);
   if(railMedal) railMedal.classList.toggle('done', progress[id]);
   updateProgressBar();
+}
+
+function toggleKey(key){
+  const b = document.getElementById('akey-'+key);
+  const btn = document.getElementById('akeybtn-'+key);
+  const open = b.classList.toggle('open');
+  btn.textContent = open ? 'Hide answer' : 'Check your answer';
 }
 
 function markChallenge(key){
